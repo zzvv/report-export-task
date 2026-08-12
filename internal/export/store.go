@@ -99,6 +99,12 @@ func (s *MemoryStore) Complete(id string, attempt int, fileURL string, runErr er
 	if !ok {
 		return Job{}, ErrNotFound
 	}
+	// 丢弃过期批次的迟到结果：仅当当前 attempt 仍处于本次执行中（Running）时才落库。
+	// 取消后重试会递增 attempt，旧批次的 goroutine 持有更小的 attempt，
+	// 其迟到返回的结果不能覆盖新批次已经产生的状态与文件地址。
+	if job.Attempt != attempt || job.Status != StatusRunning {
+		return job, nil
+	}
 
 	if runErr != nil {
 		job.Status = StatusFailed
